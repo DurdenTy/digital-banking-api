@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: digital-banking-api
+
+  datasource:
+    url: jdbc:h2:mem:bankingdb;DB_CLOSE_DELAY=-1;NON_KEYWORDS=KEY,VALUE
+    driverClassName: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    defer-datasource-initialization: true
+    show-sql: true
+
+  sql:
+    init:
+      mode: always
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    connection-timeout: 3s
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    url: /openapi.yml

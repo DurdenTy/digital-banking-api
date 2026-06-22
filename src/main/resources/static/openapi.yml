@@ -1,0 +1,318 @@
+openapi: 3.0.3
+
+info:
+  title: Digital Banking API
+  description: >
+    API REST simplificada para banco digital, com cadastro de contas,
+    consulta de contas, transferência de valores, consulta de movimentações
+    financeiras e publicação de notificações via RabbitMQ.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Ambiente local
+
+tags:
+  - name: Contas
+    description: Operações relacionadas à gestão de contas
+  - name: Transferências
+    description: Operações relacionadas a transferências e movimentações financeiras
+
+paths:
+  /v1/banco/contas/{id}:
+    get:
+      tags:
+        - Contas
+      summary: Consulta uma conta pelo ID
+      description: Retorna os dados de uma conta existente.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID da conta
+          schema:
+            type: integer
+            format: int64
+            example: 1
+      responses:
+        '200':
+          description: Conta encontrada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResponse'
+              example:
+                id: 1
+                nome: "Adilson"
+                saldo: 1000.00
+        '400':
+          description: Requisição inválida ou conta não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroTransferencia'
+              example:
+                status: 400
+                erro: "Conta de destino não encontrada."
+
+  /v1/banco/contas:
+    post:
+      tags:
+        - Contas
+      summary: Cadastra uma nova conta
+      description: Cria uma conta com nome e saldo inicial.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContaRequest'
+            example:
+              nome: "Adilson"
+              saldo: 1000.00
+      responses:
+        '201':
+          description: Conta criada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResponse'
+              example:
+                id: 1
+                nome: "Adilson"
+                saldo: 1000.00
+        '422':
+          description: Erro de validação nos campos enviados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroValidacao'
+              example:
+                status: 422
+                mensagem: "Erro validação"
+                erros:
+                  - campo: "nome"
+                    erro: "campo obrigatório"
+                  - campo: "saldo"
+                    erro: "não é permitido valor abaixo de 0.00"
+
+  /v1/banco/transferencias:
+    post:
+      tags:
+        - Transferências
+      summary: Realiza transferência entre contas
+      description: >
+        Realiza uma transferência de saldo entre duas contas. A operação é
+        executada dentro de uma transação e utiliza lock pessimista para
+        garantir consistência em cenários de concorrência.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferenciaRequest'
+            example:
+              origemId: 1
+              destinoId: 2
+              saldo: 50.00
+      responses:
+        '200':
+          description: Transferência realizada com sucesso
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Transferência realizada com sucesso."
+        '400':
+          description: Requisição inválida, conta inexistente ou origem igual ao destino
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroTransferencia'
+              examples:
+                contaNaoEncontrada:
+                  summary: Conta não encontrada
+                  value:
+                    status: 400
+                    erro: "Conta não encontrada: 1"
+                mesmaConta:
+                  summary: Origem e destino iguais
+                  value:
+                    status: 400
+                    erro: "A conta de origem não pode ser igual à conta de destino."
+        '422':
+          description: Erro de validação ou saldo insuficiente
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErroValidacao'
+                  - $ref: '#/components/schemas/ErroTransferencia'
+              examples:
+                validacao:
+                  summary: Valor inválido
+                  value:
+                    status: 422
+                    mensagem: "Erro validação"
+                    erros:
+                      - campo: "saldo"
+                        erro: "Valor da transferência deve ser maior que zero."
+                saldoInsuficiente:
+                  summary: Saldo insuficiente
+                  value:
+                    status: 422
+                    erro: "Saldo insuficiente."
+
+  /v1/banco/contas/{id}/movimentacoes:
+    get:
+      tags:
+        - Transferências
+      summary: Lista movimentações de uma conta
+      description: >
+        Retorna as transferências em que a conta participou, seja como origem
+        ou destino.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID da conta
+          schema:
+            type: integer
+            format: int64
+            example: 1
+      responses:
+        '200':
+          description: Movimentações encontradas com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransferenciaResponse'
+              example:
+                - id: 10
+                  origemId: 1
+                  destinoId: 2
+                  valor: 50.00
+                  dataHora: "2026-06-22T19:30:00"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroTransferencia'
+              example:
+                status: 400
+                erro: "Conta de destino não encontrada."
+components:
+  schemas:
+    ContaRequest:
+      type: object
+      required:
+        - nome
+        - saldo
+      properties:
+        nome:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: "Adilson"
+        saldo:
+          type: number
+          format: double
+          minimum: 0
+          example: 1000.00
+
+    ContaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        nome:
+          type: string
+          example: "Adilson"
+        saldo:
+          type: number
+          format: double
+          example: 1000.00
+
+    TransferenciaRequest:
+      type: object
+      required:
+        - origemId
+        - destinoId
+        - saldo
+      properties:
+        origemId:
+          type: integer
+          format: int64
+          example: 1
+        destinoId:
+          type: integer
+          format: int64
+          example: 2
+        saldo:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 50.00
+
+    TransferenciaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 10
+        origemId:
+          type: integer
+          format: int64
+          example: 1
+        destinoId:
+          type: integer
+          format: int64
+          example: 2
+        valor:
+          type: number
+          format: double
+          example: 50.00
+        dataHora:
+          type: string
+          format: date-time
+          example: "2026-06-22T19:30:00"
+
+    ErroCampo:
+      type: object
+      properties:
+        campo:
+          type: string
+          example: "saldo"
+        erro:
+          type: string
+          example: "Valor da transferência deve ser maior que zero."
+
+    ErroValidacao:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 422
+        mensagem:
+          type: string
+          example: "Erro validação"
+        erros:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErroCampo'
+
+    ErroTransferencia:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        erro:
+          type: string
+          example: "Conta não encontrada: 1"

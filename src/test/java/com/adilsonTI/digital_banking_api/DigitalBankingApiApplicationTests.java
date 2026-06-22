@@ -1,0 +1,13 @@
+package com.adilsonTI.digital_banking_api;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class DigitalBankingApiApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
